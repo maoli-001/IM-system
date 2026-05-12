@@ -124,3 +124,32 @@ go run .
 <img width="771" height="120" alt="image" src="https://github.com/user-attachments/assets/87c778ea-8764-4306-baa2-ea8e749f7e61" />
 <img width="756" height="84" alt="image" src="https://github.com/user-attachments/assets/cedcfd5f-eaf3-4853-9cb3-6345a3127964" />
 当有一个用户上线时，所有在线用户都将收到消息<br>
+
+### 版本三：用户消息广播功能
+`server.go`中`Handler`方法
+```
+	//接收客户端消息
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			n, err := conn.Read(buf)
+			if n == 0 {
+				this.BroadCast(user, "下线")
+				return
+			}
+
+			if err != nil && err != io.EOF {
+				fmt.Println("conn.Read error:", err)
+				return
+			}
+
+			//提取用户消息
+			msg := string(buf[:n-1])
+			//广播消息
+			this.BroadCast(user, msg)
+		}
+	}()
+	//当前Handler阻塞
+	select {}
+}
+```
