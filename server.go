@@ -62,14 +62,9 @@ func (this *Server) Start() {
 // Go中没有类，给Server结构体添加一个方法Handler来处理客户端上线
 func (this *Server) Handler(conn net.Conn) {
 	//创建User实例
-	user := NewUser(conn)
+	user := NewUser(conn, this)
 	//将用户加入在线列表
-	this.mapLock.Lock()
-	this.OnlineMap[user.Name] = user
-	this.mapLock.Unlock()
-
-	//广播当前用户上线消息
-	this.BroadCast(user, "已上线")
+	user.Online()
 
 	//接收客户端消息
 	go func() {
@@ -77,7 +72,7 @@ func (this *Server) Handler(conn net.Conn) {
 		for {
 			n, err := conn.Read(buf)
 			if n == 0 {
-				this.BroadCast(user, "下线")
+				user.Offline()
 				return
 			}
 
@@ -88,8 +83,8 @@ func (this *Server) Handler(conn net.Conn) {
 
 			//提取用户消息
 			msg := string(buf[:n-1])
-			//广播消息
-			this.BroadCast(user, msg)
+			//用户针对msg进行处理
+			user.DoMessage(msg)
 		}
 	}()
 	//当前Handler阻塞
