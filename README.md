@@ -153,3 +153,95 @@ go run .
 	select {}
 }
 ```
+
+### 版本四：用户业务逻辑封装
+```
+// 定义User结构体
+type User struct {
+	Name string
+	Addr string
+	C    chan string
+	conn net.Conn
+
+	server *Server
+}
+
+// 创建User实例
+func NewUser(conn net.Conn, server *Server) *User {
+	userAddr := conn.RemoteAddr().String()
+
+	user := &User{
+		Name:   userAddr,
+		Addr:   userAddr,
+		C:      make(chan string),
+		conn:   conn,
+		server: server,
+	}
+	//监听当前的channel
+	go user.ListenMessage()
+
+	return user
+}
+```
+在`user,go`中user结构体添加一个`server *Server`<br>
+
+把`server.go`中用户上线下线及用户处理消息的逻辑搬到`user.go`<br>
+```
+/ 用户的上线业务
+func (this *User) Online() {
+	this.server.mapLock.Lock()
+	this.server.OnlineMap[this.Name] = this
+	this.server.mapLock.Unlock()
+
+	//广播当前用户上线消息
+	this.server.BroadCast(this, "已上线")
+}
+
+// 用户下线的业务
+func (this *User) Offline() {
+	this.server.mapLock.Lock()
+	delete(this.server.OnlineMap, this.Name)
+	this.server.mapLock.Unlock()
+
+	//广播当前用户上线消息
+	this.server.BroadCast(this, "下线")
+}
+
+// 用户处理消息的业务
+func (this *User) DoMessage(msg string) {
+	this.server.BroadCast(this, msg)
+}
+```
+同时修改`server.go`中的客户端处理逻辑
+```
+func (this *Server) Handler(conn net.Conn) {
+	//创建User实例
+	user := NewUser(conn, this)
+	//将用户加入在线列表
+	user.Online()
+
+	//接收客户端消息
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			n, err := conn.Read(buf)
+			if n == 0 {
+				user.Offline()
+				return
+			}
+
+			if err != nil && err != io.EOF {
+				fmt.Println("conn.Read error:", err)
+				return
+			}
+
+			//提取用户消息
+			msg := string(buf[:n-1])
+			//用户针对msg进行处理
+			user.DoMessage(msg)
+		}
+	}()
+	//当前Handler阻塞
+	select {}
+}
+```
