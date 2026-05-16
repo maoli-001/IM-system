@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 )
 
 // 定义Server结构体
@@ -66,6 +67,9 @@ func (this *Server) Handler(conn net.Conn) {
 	//将用户加入在线列表
 	user.Online()
 
+	//监听用户是否活跃
+	isLive := make(chan bool)
+
 	//接收客户端消息
 	go func() {
 		buf := make([]byte, 4096)
@@ -85,10 +89,27 @@ func (this *Server) Handler(conn net.Conn) {
 			msg := string(buf[:n-1])
 			//用户针对msg进行处理
 			user.DoMessage(msg)
+
+			//用户发送消息，目前活跃
+			isLive <- true
 		}
 	}()
 	//当前Handler阻塞
-	select {}
+	for {
+		select {
+		case <-isLive:
+			//活跃状态重置定时器
+		case <-time.After(time.Minute * 10):
+			//超时，用户不活跃
+			user.SendMsg("你已离线，请重新登录\n")
+			//销毁用的资源
+			close(user.C)
+			//光比链接
+			conn.Close()
+			//退出
+			return
+		}
+	}
 }
 
 // 广播
