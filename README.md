@@ -269,3 +269,22 @@ func (this *User) SendMsg(msg string) {
 	this.conn.Write([]byte(msg))
 }
 ```
+
+### 版本六：修改用户名
+```
+else if len(msg) > 7 && msg[:7] == "rename|" { //修改名字
+		newName := strings.Split(msg, "|")[1]
+
+		_, ok := this.server.OnlineMap[newName]
+		if ok {
+			this.SendMsg("用户名已被占用\n")
+		} else {
+			this.server.mapLock.Lock()
+			delete(this.server.OnlineMap, this.Name)
+			this.server.OnlineMap[newName] = this
+			this.server.mapLock.Unlock()
+
+			this.Name = newName
+			this.SendMsg("用户名修改成功\n")
+		}
+```
