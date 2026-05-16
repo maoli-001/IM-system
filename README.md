@@ -288,3 +288,59 @@ else if len(msg) > 7 && msg[:7] == "rename|" { //修改名字
 			this.SendMsg("用户名修改成功\n")
 		}
 ```
+
+### 版本七：超时踢出
+在`server.go`中添加监听活跃的通道，设置计时器
+```
+func (this *Server) Handler(conn net.Conn) {
+	//创建User实例
+	user := NewUser(conn, this)
+	//将用户加入在线列表
+	user.Online()
+
+	//监听用户是否活跃
+	isLive := make(chan bool)
+
+	//接收客户端消息
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			n, err := conn.Read(buf)
+			if n == 0 {
+				user.Offline()
+				return
+			}
+
+			if err != nil && err != io.EOF {
+				fmt.Println("conn.Read error:", err)
+				return
+			}
+
+			//提取用户消息
+			msg := string(buf[:n-1])
+			
+			//用户针对msg进行处理
+			user.DoMessage(msg)
+
+			//用户发送消息，目前活跃
+			isLive <- true
+		}
+	}()
+	//当前Handler阻塞
+	for {
+		select {
+		case <-isLive:
+			//活跃状态重置定时器
+		case <-time.After(time.Minute * 10):
+			//超时，用户不活跃
+			user.SendMsg("你已离线，请重新登录\n")
+			//销毁用的资源
+			close(user.C)
+			//光比链接
+			conn.Close()
+			//退出
+			return
+		}
+	}
+}
+```
